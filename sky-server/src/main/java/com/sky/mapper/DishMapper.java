@@ -32,7 +32,6 @@ public interface DishMapper {
     void insert(Dish dish);
 
     /**
-     *
      * 菜品分页查询
      * @param dishPageQueryDTO
      * @return
@@ -65,6 +64,7 @@ public interface DishMapper {
      * 根据id修改菜品基本信息
      * @param dish
      */
+    @AutoFill(value = OperationType.UPDATE)
     void update(Dish dish);
 
     /**
