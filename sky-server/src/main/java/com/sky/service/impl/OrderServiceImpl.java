@@ -17,6 +17,7 @@ import com.sky.vo.OrderSubmitVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private UserMapper userMapper;
 
+    private Orders orders;
 
     /**
      * 用户下单
@@ -73,26 +75,27 @@ public class OrderServiceImpl implements OrderService {
         }
 
         //构造订单数据
-        Orders order = new Orders();
-        BeanUtils.copyProperties(ordersSubmitDTO,order);
-        order.setPhone(addressBook.getPhone());
-        order.setAddress(addressBook.getDetail());
-        order.setConsignee(addressBook.getConsignee());
-        order.setNumber(String.valueOf(System.currentTimeMillis()));
-        order.setUserId(userId);
-        order.setStatus(Orders.PENDING_PAYMENT);
-        order.setPayStatus(Orders.UN_PAID);
-        order.setOrderTime(LocalDateTime.now());
+        Orders orders = new Orders();
+        BeanUtils.copyProperties(ordersSubmitDTO,orders);
+        orders.setPhone(addressBook.getPhone());
+        orders.setAddress(addressBook.getDetail());
+        orders.setConsignee(addressBook.getConsignee());
+        orders.setNumber(String.valueOf(System.currentTimeMillis()));
+        orders.setUserId(userId);
+        orders.setStatus(Orders.PENDING_PAYMENT);
+        orders.setPayStatus(Orders.UN_PAID);
+        orders.setOrderTime(LocalDateTime.now());
 
+        this.orders = orders;
         //向订单表插入1条数据
-        orderMapper.insert(order);
+        orderMapper.insert(orders);
 
         //订单明细数据
         List<OrderDetail> orderDetailList = new ArrayList<>();
         for (ShoppingCart cart : shoppingCartList) {
             OrderDetail orderDetail = new OrderDetail(); //订单明细
             BeanUtils.copyProperties(cart, orderDetail);
-            orderDetail.setOrderId(order.getId()); //设置当前订单明细关联的订单id
+            orderDetail.setOrderId(orders.getId()); //设置当前订单明细关联的订单id
             orderDetailList.add(orderDetail);
         }
 
@@ -104,10 +107,10 @@ public class OrderServiceImpl implements OrderService {
 
         //封装返回结果
         OrderSubmitVO orderSubmitVO = OrderSubmitVO.builder()
-                .id(order.getId())
-                .orderNumber(order.getNumber())
-                .orderAmount(order.getAmount())
-                .orderTime(order.getOrderTime())
+                .id(orders.getId())
+                .orderNumber(orders.getNumber())
+                .orderAmount(orders.getAmount())
+                .orderTime(orders.getOrderTime())
                 .build();
 
         return orderSubmitVO;
@@ -124,7 +127,7 @@ public class OrderServiceImpl implements OrderService {
         Long userId = BaseContext.getCurrentId();
         User user = userMapper.getById(userId);
 
-        //调用微信支付接口，生成预支付交易单
+        /*//调用微信支付接口，生成预支付交易单
         JSONObject jsonObject = weChatPayUtil.pay(
                 ordersPaymentDTO.getOrderNumber(), //商户订单号
                 new BigDecimal(0.01), //支付金额，单位 元
@@ -134,12 +137,19 @@ public class OrderServiceImpl implements OrderService {
 
         if (jsonObject.getString("code") != null && jsonObject.getString("code").equals("ORDERPAID")) {
             throw new OrderBusinessException("该订单已支付");
-        }
+        }*/
 
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("code","ORDERPAID");
         OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
         vo.setPackageStr(jsonObject.getString("package"));
-
+        Integer OrderPaidStatus = Orders.PAID;//支付状态，已支付
+        Integer OrderStatus = Orders.TO_BE_CONFIRMED;  //订单状态，待接单
+        LocalDateTime check_out_time = LocalDateTime.now();//更新支付时间
+        orderMapper.updateStatus(OrderStatus, OrderPaidStatus, check_out_time, this.orders.getId());
         return vo;
+
+
     }
 
     /**
